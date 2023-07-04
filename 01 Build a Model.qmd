@@ -1,0 +1,144 @@
+---
+title: "Build a Model"
+format: html
+editor: visual
+self-contained: true
+---
+
+https://www.tidymodels.org/start/models/
+
+## Load and plot data
+
+```{r}
+#| label: Setup
+#| message: false
+#| warning: false
+library(tidyverse)
+library(tidymodels)
+library(broom.mixed)
+library(dotwhisker)
+library(rstanarm)
+
+urchins <-
+  read_csv("https://tidymodels.org/start/models/urchins.csv") %>%
+  setNames(c("food_regime", "initial_volume", "width")) %>%
+  mutate(food_regime = factor(food_regime, levels = c("Initial", "Low", "High")))
+
+```
+
+```{r}
+summary(urchins)
+```
+
+Note: notice the grouped plotting of the data with `group` and `col` arguments of `aes()`
+
+```{r}
+ggplot(urchins,
+       aes(x = initial_volume,
+           y = width,
+           group = food_regime,
+           col = food_regime)) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE) +
+  scale_color_viridis_d(option = "plasma", end = .7)
+```
+
+## Steps of building a Model
+
+-   Define Model as a Formula, e.g. `y ~ x1 + x2`
+
+-   Specify the "functional form" of a model and declare it with the respective function, e.g. "linear regression" with `linear_reg()`
+
+-   Choose a computational engine for actually fitting or training a model with `set_engine()`
+
+-   Estimate or train the model using `fit()`
+
+```{r}
+lm_fit <- linear_reg() |> 
+  set_engine("lm") |> 
+  fit(width ~ initial_volume * food_regime, data = urchins) 
+
+tidy(lm_fit, conf.int = TRUE)
+```
+
+```{r}
+tidy(lm_fit) |> 
+  dwplot(dot_args = list(size = 2, color = "black"),
+         whisker_args = list(color = "black"),
+         vline = geom_vline(xintercept = 0, colour = "grey50", linetype = 2))
+```
+
+## Make Predictions
+
+Generate new data for a simulation (three times to see if bayesian will have differneces):
+
+```{r}
+new_points <- expand.grid(initial_volume = 20, 
+                          food_regime = c("Initial", "Low", "High")) |> arrange(food_regime)
+new_points
+```
+
+Use `predict()` to generate predictions in a standardized way
+
+```{r}
+mean_pred <- predict(lm_fit, new_data = new_points)
+conf_int_pred <- predict(lm_fit, 
+                         new_data = new_points, 
+                         type = "conf_int")
+plot_data <- 
+  new_points %>% 
+  bind_cols(mean_pred) %>% 
+  bind_cols(conf_int_pred)
+
+plot_data
+
+```
+
+```{r}
+# and plot:
+ggplot(plot_data, aes(x = food_regime, col = food_regime)) + 
+  geom_point(aes(y = .pred)) + 
+  geom_errorbar(aes(ymin = .pred_lower, 
+                    ymax = .pred_upper),
+                width = .2) + 
+  labs(y = "urchin size")
+```
+
+## Model with different Engine
+
+To use a different modeling engine (e.g. Stan) simply replace the `set_engine()` part and define any needed additional arguments (e.g. prior distributions).
+
+Example for the same analysis using a Bayesian approach with Stan:
+
+```{r}
+#| label: Bayes Fit
+set.seed(123)
+# set the prior distribution
+prior_dist <- rstanarm::student_t(df = 1)
+
+bayes_mod <-   
+  linear_reg() %>% 
+  set_engine("stan", 
+             prior_intercept = prior_dist, 
+             prior = prior_dist) 
+
+bayes_fit <- 
+  bayes_mod %>% 
+  fit(width ~ initial_volume * food_regime, data = urchins)
+
+tidy(bayes_fit, conf.int = TRUE)
+
+```
+
+```{r}
+bayes_plot_data <- 
+  new_points %>% 
+  bind_cols(predict(bayes_fit, new_data = new_points)) %>% 
+  bind_cols(predict(bayes_fit, new_data = new_points, type = "conf_int"))
+
+ggplot(bayes_plot_data, aes(x = food_regime, col = food_regime)) + 
+  geom_point(aes(y = .pred)) + 
+  geom_errorbar(aes(ymin = .pred_lower, ymax = .pred_upper), width = .2) + 
+  labs(y = "urchin size") + 
+  ggtitle("Bayesian model with t(1) prior distribution")
+```
