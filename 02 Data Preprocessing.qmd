@@ -2,6 +2,14 @@
 title: "Data Preprocessing"
 format: html
 editor: visual
+self-contained: true
 ---
 
 ## 
+
+# Preprocess your data with recipes
+
+```{r}
+#| label: Setup
+library(nycflights13)
+```

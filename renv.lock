@@ -1814,6 +1814,17 @@
       ],
       "Hash": "df58958f293b166e4ab885ebcad90e02"
     },
+    "nycflights13": {
+      "Package": "nycflights13",
+      "Version": "1.0.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "tibble"
+      ],
+      "Hash": "61eb941328b49a62d7f9816dfed7d959"
+    },
     "openssl": {
       "Package": "openssl",
       "Version": "2.0.6",
