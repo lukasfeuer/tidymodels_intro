@@ -7,9 +7,158 @@ self-contained: true
 
 ## 
 
-# Preprocess your data with recipes
+# Preprocess data with `recipes`
+
+## The New York City Flight Data
 
 ```{r}
 #| label: Setup
+#| message: false
+#| warning: false
+library(tidymodels)
 library(nycflights13)
+library(skimr)
+set.seed(123)
+```
+
+-   Task: predict if a flight arrives more than 30 minutes late ("late" or "on_time")
+
+-   Logistic Regression is used to predict the factor outcome variable
+
+-   Identification Variables (not used for training the model): `flight` and `time_hour`
+
+-   `dest` and `carrier` have to be converted to dummy variables
+
+```{r}
+#| label: Prepare Flight Data
+
+flight_data <- flights |> 
+  mutate(
+    arr_delay = ifelse(arr_delay >= 30, "late", "on_time"),
+    arr_delay = factor(arr_delay),
+    date = lubridate::as_date(time_hour)
+  ) |>
+  inner_join(weather, by = c("origin", "time_hour")) |> 
+  select(dep_time, flight, origin, dest, air_time, distance, 
+         carrier, date, arr_delay, time_hour) |> 
+  na.omit() |> 
+  mutate_if(is.character, as.factor)
+
+flight_data %>% 
+  count(arr_delay) %>% 
+  mutate(prop = scales::percent(n/sum(n))) 
+
+# glimpse(flight_data)
+```
+
+```{r}
+#| label: skimr::skim
+#| eval: false
+flight_data %>% 
+  skimr::skim(dest, carrier) 
+# 16 carriers and 104 destinations
+
+# take note! seems useful for work
+```
+
+## Data Splitting with `rsample`
+
+```{r}
+set.seed(222)
+
+data_split <- initial_split(flight_data, prop = 3/4)
+
+train_data <- training(data_split)
+test_data <- testing(data_split)
+```
+
+## Create Recipes, Roles and Features
+
+-   Create a recipe for new predictors and preprocessing
+
+-   `recipe()` outcome on the left hand side of the tilde, and predictors on the right hand side (by name or `.` for "all"). Also name the data set.
+
+-   `update_roles()`: optionally describe the roles of variables (like identification variables)
+
+-   Date features:
+
+    -   Normal date-column in R-date-format will be transformed in some kind of numeric type. This might be useful if there might be a linear trend between log-odds of a late arrival and the numeric date
+
+    -   Derive other meaningful features from the date like the day of week ("dow"), month, holiday
+
+-   Dummies for nominal predictors if needed
+
+-   Remove zero variance predictors (might also be produced by creating dummy variables) with `step_zv()`
+
+```{r}
+flights_rec <- 
+  recipe(arr_delay ~ ., data = train_data) |> 
+  update_role(flight, time_hour, new_role = "ID") |> 
+  step_date(date, features = c("dow", "month")) |> 
+  step_holiday(date,
+               holidays = timeDate::listHolidays("US"),
+               keep_original_cols = FALSE) |> 
+  step_rm(dest) |> 
+  step_dummy(all_nominal_predictors()) |> 
+  step_zv(all_predictors())
+
+flights_rec
+```
+
+## Fit a Model with a recipe
+
+-   Build a model specification with `parsnip`
+
+-   Create a model workflow to simplify the process of fitting a model with a recipe
+
+```{r}
+#| label: Fit Model with Workflow
+lr_mod <- 
+  logistic_reg() |> 
+  set_engine("glm")
+
+flights_workflow <- 
+  workflow() |> 
+  add_model(lr_mod) |> 
+  add_recipe(flights_rec)
+
+flights_fit <- 
+  flights_workflow |> 
+  fit(data = train_data)
+
+flights_fit |> 
+  extract_fit_parsnip() |> 
+  tidy()
+
+```
+
+## Predict
+
+-   Create new predictions from the test data using `predict()`. `type = "prob"` for predicted class probabilities
+
+-   `augment()` for model and test data in one output
+
+-   ROC curve as performance metric with `roc_curve()` and area under the curve `roc_auc()` from the `yardstick` package
+
+```{r}
+
+#predict(flights_fit, test_data)
+flights_aug <- 
+  augment(flights_fit, test_data)
+
+# The data look like: 
+flights_aug %>%
+  select(arr_delay, time_hour, flight, .pred_class, .pred_on_time)
+
+```
+
+```{r}
+flights_aug %>% 
+  roc_curve(truth = arr_delay, .pred_late) %>% 
+  autoplot()
+```
+
+```{r}
+flights_aug %>% 
+  roc_auc(truth = arr_delay, .pred_late)
 ```
