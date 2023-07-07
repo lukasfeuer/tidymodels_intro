@@ -2251,6 +2251,22 @@
       ],
       "Hash": "4543b8cd233ae25c6aba8548be9e747e"
     },
+    "repr": {
+      "Package": "repr",
+      "Version": "1.1.6",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "base64enc",
+        "grDevices",
+        "htmltools",
+        "jsonlite",
+        "pillar",
+        "utils"
+      ],
+      "Hash": "fab761ee8f3554a04afef40ac53689f4"
+    },
     "reprex": {
       "Package": "reprex",
       "Version": "2.0.2",
@@ -2333,6 +2349,17 @@
         "stats"
       ],
       "Hash": "b3c892a81783376cc2204af0f5805a80"
+    },
+    "rpart.plot": {
+      "Package": "rpart.plot",
+      "Version": "3.1.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "rpart"
+      ],
+      "Hash": "3281d3200bbcff53781d7d40d78f3590"
     },
     "rprojroot": {
       "Package": "rprojroot",
@@ -2602,6 +2629,30 @@
         "shiny"
       ],
       "Hash": "30f0ebc41feba25691073626ff5e2cf4"
+    },
+    "skimr": {
+      "Package": "skimr",
+      "Version": "2.1.5",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "cli",
+        "dplyr",
+        "knitr",
+        "magrittr",
+        "pillar",
+        "purrr",
+        "repr",
+        "rlang",
+        "stats",
+        "stringr",
+        "tibble",
+        "tidyr",
+        "tidyselect",
+        "vctrs"
+      ],
+      "Hash": "8f138ff2c8fbea9e0a523f6c399c0386"
     },
     "slider": {
       "Package": "slider",
@@ -3000,6 +3051,22 @@
         "rlang"
       ],
       "Hash": "d0ef2856b83dc33ea6e255caf6229ee2"
+    },
+    "vip": {
+      "Package": "vip",
+      "Version": "0.3.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "ggplot2",
+        "gridExtra",
+        "magrittr",
+        "plyr",
+        "stats",
+        "tibble",
+        "utils"
+      ],
+      "Hash": "70e6da4dbf60a40e80c57901ffef043d"
     },
     "viridisLite": {
       "Package": "viridisLite",

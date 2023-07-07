@@ -1,0 +1,152 @@
+---
+title: "04 Tune Model Parameters"
+format: html
+editor: visual
+self-contained: true
+---
+
+[Chapter 4](https://www.tidymodels.org/start/tuning/)
+
+-   **Hyperparameters**: cannot be learned directly from the data but have to be estimated on resampled data (tuning). E.g. the number of predictors that are sampled at splits in a tree-based model (`mtry`) or learning rate in a boosted tree model (`learn_rate`).
+
+-   For example description description see "03 Model Evaluation with Resampling" but this time a **decision tree model** (not random forest) is used.
+
+-   Random Forest performs well with default hyperparameters but other tree-based models can be sensitive to values of hyperparameters because they tend to overfit the data. This example tunes two of serveral possible hyperparameters:
+
+    -   Complexity parameter for the tree `cost_complexity`: helps to prune back the tree as it adds a cost to error rates for more complex trees.
+
+    -   Maximum `tree_depth`: helps stopping tree from growing after it reaches a certain depth.
+
+```{r}
+#| label: Setup
+#| warning: false
+#| message: false
+library(tidymodels) 
+
+# Helper packages
+library(rpart.plot)  # for visualizing a decision tree
+library(vip)         # for variable importance plots
+
+data(cells, package = "modeldata")
+set.seed(123)
+cell_split <- initial_split(cells |> select(-case), 
+                            strata = class)
+cell_train <- training(cell_split)
+cell_test <- testing(cell_split)
+```
+
+## Tuning Hyperparameters
+
+-   Create a parsnip model specification that identifies which hyperparameters need to be tuned
+
+-   Model specification is used to train many models on resampled data (cannot be trained on a single data set). Data is again split in to "folds" with `vfold_cv()`
+
+-   Create a grid of possible hyperparameter values for training (using `dials` with convenience functions for each hyperparameter and `grid_regular()`)
+
+```{r}
+# parsnip model specification for tuning
+tune_spec <- 
+  decision_tree(
+    cost_complexity = tune(),
+    tree_depth = tune()
+  ) |> 
+  set_engine("rpart") |> 
+  set_mode("classification")
+
+# grid of possible values to try for tuning 
+tree_grid <- grid_regular(cost_complexity(),
+                          tree_depth(),
+                          levels = 5) # 5 example values for each parameter
+
+# create cross-validateion folds for tuning
+set.seed(234)
+cell_folds <- vfold_cv(cell_train)
+```
+
+## Model tuning with a grid
+
+-   `tune_grid()` to fit modles at all different values from the grid using `workflow()`
+
+-   `show_best()` shows the top 5 candidate models
+
+-   `select_best()` to pull the single best set of hyperparameters
+
+```{r}
+#| label: Tune Grid
+set.seed(345)
+
+tree_wf <- 
+  workflow() |> 
+  add_model(tune_spec) |> 
+  add_formula(class ~ .) # or use add_recipe() if a recipe is needed 
+
+tree_res <- 
+  tree_wf |> 
+  tune_grid(
+    resamples = cell_folds,
+    grid = tree_grid
+  )
+
+tree_res |> 
+  collect_metrics() |> 
+  mutate(tree_depth = factor(tree_depth)) |> 
+  ggplot(aes(cost_complexity, mean, color = tree_depth)) +
+  geom_line(linewidth = 1.5, alpha = 0.6) +
+  geom_point(size = 2) +
+  facet_wrap(~ .metric, scales = "free", nrow = 2) +
+  scale_x_log10(labels = scales::label_number()) +
+  scale_color_viridis_d(option = "plasma", begin = .9, end = 0)
+
+# tree_res |> show_best("accuracy") 
+best_tree <- tree_res |> 
+  select_best("accuracy")
+
+best_tree
+```
+
+## Finalizing the Model
+
+-   Update workflow with the selected best values with `finalize_workflow()`
+
+-   Fit the final model with `last_fit()` to the training data and use test data to estimate performance
+
+-   the finalized, fitted workflow in `final_fit` can be extracted an used for predicting new data
+
+```{r}
+final_wf <- 
+  tree_wf |> 
+  finalize_workflow(best_tree)
+
+final_fit <- 
+  final_wf |> 
+  last_fit(cell_split)
+
+final_fit |> 
+  collect_metrics()
+
+final_fit |> 
+  collect_predictions() |> 
+  roc_curve(class, .pred_PS) |> 
+  autoplot()
+```
+
+```{r}
+final_tree <- extract_workflow(final_fit) # final_fit$.workflow[[1]]
+final_tree
+```
+
+## Understanding the Model
+
+-   Visualization of the decision tree with `rpart.plot()`
+
+-   List the variables by estimated importance to the final model with `vip`
+
+```{r}
+final_tree |> 
+  extract_fit_engine() |> 
+  rpart.plot(roundint = F)
+
+final_tree |> 
+  extract_fit_parsnip() |> 
+  vip()
+```

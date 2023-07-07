@@ -2,25 +2,115 @@
 title: "03 Model Evaluation with Resampling"
 format: html
 editor: visual
+self-contained: true
 ---
 
-## Quarto
+https://www.tidymodels.org/start/resampling/
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+Example uses the cells data set for cell separation in images. Prediction target is the column `class` and to predict if cells of an image were well separated "WS" or poorly separated "PS".
 
 ```{r}
-1 + 1
+#| label: Setup
+#| message: false
+#| warning: false
+
+library(tidymodels)
+library(modeldata)
+data(cells, package = "modeldata")
+
 ```
 
-You can add options to executable code like this
+## Data Split
+
+-   By default 25% of the data are used for testing
+
+-   `strata` argument conducts a stratified split which ensures the same distribution of WS/PS in training and test data set as it is present in the full data set
 
 ```{r}
-#| echo: false
-2 * 2
+set.seed(123)
+cells_split <- initial_split(cells |> select(-case), strata = class)
+cell_train <- training(cells_split)
+cell_test <- testing(cells_split)
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+## Modeling
+
+-   Random Forest Model for classification of cell separation
+
+-   No recipe because no reprocessing needed for this model
+
+-   Large number of trees needed and therefore expensive to run
+
+```{r}
+set.seed(234)
+
+rf_mod <- 
+  rand_forest(trees = 1000) %>% 
+  set_engine("ranger") %>% 
+  set_mode("classification")
+
+rf_fit <- 
+  rf_mod %>% 
+  fit(class ~ ., data = cell_train)
+rf_fit
+
+```
+
+## Estimating Performance using `yardstick`
+
+-   Compare different models by some model specific performance statistics. For the present model these might be:
+
+    -   Area under the Receiver Operating Characteristic Curve
+
+    -   Overall Classification Accuracy
+
+-   Performance is measured using the **test data**; predicting the training set can only reflect what the model already knows.
+
+```{r}
+rf_testing_pred <- 
+  predict(rf_fit, cell_test) %>% 
+  bind_cols(predict(rf_fit, cell_test, type = "prob")) %>% 
+  bind_cols(cell_test %>% select(class))
+
+rf_testing_pred %>%                   
+  roc_auc(truth = class, .pred_PS) |> 
+  knitr::kable()
+
+rf_testing_pred %>%                   
+  accuracy(truth = class, .pred_class) |> 
+  knitr::kable()
+
+```
+
+## Resampling - Measure Model Performance with `rsample` and `tune`
+
+-   Resampling is done on the training set. Data is split into an initial training and testing data set with `initial_split()`
+
+-   A series of training/testing splits are done **inside** of the training data to create a model and measure performance with `fit_resamples()`
+
+-   Example: 10-fold cross-validation (CV): randomly allocates the 1514 cells in the training set to 10 groups of roughly equal size, called "folds". For the first iteration of resampling, the first fold of about 151 cells are held out for the purpose of measuring performance. The other 90% of the data (about 1362 cells) are used to fit the model. 10-fold CV moves iteratively through the folds and leaves a different 10% out each time for model assessment. The models themselves are not used, only the performance statistics.
+
+-   Other resampling methods: https://rsample.tidymodels.org/reference/#section-resampling-methods
+
+-   If we wanted to try different model types for this data set, we could more confidently compare performance metrics computed using resampling to choose between models
+
+-   Resampling allows us to simulate how well our model will perform on new data, and the test set acts as the final, unbiased check for our model's performance.
+
+```{r}
+set.seed(345)
+# Create the 10 folds
+folds <- vfold_cv(cell_train, v = 10)
+
+# Generate a resampling workflow
+rf_workflow <- 
+  workflow() %>%
+  add_model(rf_mod) %>%
+  add_formula(class ~ .)
+
+set.seed(456)
+rf_fit_resample <- 
+  rf_workflow %>% 
+  fit_resamples(folds)
+
+tune::collect_metrics(rf_fit_resample)
+```

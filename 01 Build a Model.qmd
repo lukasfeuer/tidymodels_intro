@@ -74,7 +74,8 @@ Generate new data for a simulation (three times to see if bayesian will have dif
 
 ```{r}
 new_points <- expand.grid(initial_volume = 20, 
-                          food_regime = c("Initial", "Low", "High")) |> arrange(food_regime)
+                          food_regime = c("Initial", "Low", "High")) |> 
+  arrange(food_regime)
 new_points
 ```
 
